@@ -1,3 +1,5 @@
+# CI/CD pipeline configuration for Employee-Task-Management-System
+
 stages:
   - build
   - test
