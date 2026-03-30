@@ -5,7 +5,7 @@ if (isset($_SESSION['role']) && isset($_SESSION['id']) && $_SESSION['role'] == "
     include "app/Model/Task.php";
     
     if (!isset($_GET['id'])) {
-    	 header("Location: tasks.php")
+    	 header("Location: tasks.php");
     	 exit();
     }
     $id = $_GET['id'];
