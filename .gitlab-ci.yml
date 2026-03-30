@@ -36,3 +36,4 @@ package_job:
       - spring-petclinic-admin-server/target/*.jar
       - spring-petclinic-config-server/target/*.jar
       - spring-petclinic-discovery-server/target/*.jar
+#
