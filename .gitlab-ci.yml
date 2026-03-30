@@ -1,35 +1,32 @@
 stages:
   - build
   - test
+  - package
 
-# Utilise une image qui contient déjà Maven + JDK 17
-default:
-  image: maven:3.9.6-eclipse-temurin-17
-  before_script:
-    - echo "Using Maven + JDK 17 image"
-    - mvn -v
-    - java -version
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
 
-# Job de compilation
+cache:
+  paths:
+    - .m2/repository
+
 build_job:
   stage: build
+  image: maven:3.9.6-eclipse-temurin-17
   script:
-    - mvn compile -Dhttps.protocols=TLSv1.2 \
-        -Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository \
-        -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn \
-        -Dorg.slf4j.simpleLogger.showDateTime=true \
-        --batch-mode --errors --fail-at-end --show-version
-  artifacts:
-    paths:
-      - target/
+    - mvn compile
 
-# Job de test
 test_job:
   stage: test
+  image: maven:3.9.6-eclipse-temurin-17
   script:
-    - mvn test --batch-mode
-  dependencies:
-    - build_job
+    - mvn test
 
-    # Mise à jour du pipeline
-
+package_job:
+  stage: package
+  image: maven:3.9.6-eclipse-temurin-17
+  script:
+    - mvn package
+  artifacts:
+    paths:
+      - target/*.jar
