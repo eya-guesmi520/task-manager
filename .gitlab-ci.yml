@@ -14,19 +14,25 @@ build_job:
   stage: build
   image: maven:3.9.6-eclipse-temurin-17
   script:
-    - mvn compile
+    - mvn -B clean compile
 
 test_job:
   stage: test
   image: maven:3.9.6-eclipse-temurin-17
   script:
-    - mvn test
+    - mvn -B test
 
 package_job:
   stage: package
   image: maven:3.9.6-eclipse-temurin-17
   script:
-    - mvn package
+    - mvn -B package -DskipTests
   artifacts:
     paths:
-      - target/*.jar
+      - spring-petclinic-customers-service/target/*.jar
+      - spring-petclinic-vets-service/target/*.jar
+      - spring-petclinic-visits-service/target/*.jar
+      - spring-petclinic-api-gateway/target/*.jar
+      - spring-petclinic-admin-server/target/*.jar
+      - spring-petclinic-config-server/target/*.jar
+      - spring-petclinic-discovery-server/target/*.jar
