@@ -1,32 +1,32 @@
 stages:
- - build
- - test
+  - build
+  - test
 
-cache:
- paths:
-   - .m2/repository
- key: "$CI_JOB_NAME"
+# Utilise une image qui contient déjà Maven + JDK 17
+default:
+  image: maven:3.9.6-eclipse-temurin-17
+  before_script:
+    - echo "Using Maven + JDK 17 image"
+    - mvn -v
+    - java -version
 
+# Job de compilation
 build_job:
   stage: build
-  image: eclipse-temurin:17-jdk-alpine
   script:
-    - ./mvnw compile
-      -Dhttps.protocols=TLSv1.2
-      -Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository
-      -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=WARN
-      -Dorg.slf4j.simpleLogger.showDateTime=true
-      -Djava.awt.headless=true
-      --batch-mode --errors --fail-at-end --show-version -DinstallAtEnd=true -DdeployAtEnd=true
+    - mvn compile -Dhttps.protocols=TLSv1.2 \
+        -Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository \
+        -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn \
+        -Dorg.slf4j.simpleLogger.showDateTime=true \
+        --batch-mode --errors --fail-at-end --show-version
+  artifacts:
+    paths:
+      - target/
 
+# Job de test
 test_job:
   stage: test
-  image: eclipse-temurin:17-jdk-alpine
   script:
-    - ./mvnw test
-      -Dhttps.protocols=TLSv1.2
-      -Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository
-      -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=WARN
-      -Dorg.slf4j.simpleLogger.showDateTime=true
-      -Djava.awt.headless=true
-      --batch-mode --errors --fail-at-end --show-version -DinstallAtEnd=true -DdeployAtEnd=true
+    - mvn test --batch-mode
+  dependencies:
+    - build_job
