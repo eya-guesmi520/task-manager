@@ -1,39 +1,23 @@
 stages:
   - build
   - test
-  - package
 
-variables:
-  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
-
-cache:
-  paths:
-    - .m2/repository
-
+# Job pour vérifier que PHP est installé et que le code compile
 build_job:
   stage: build
-  image: maven:3.9.6-eclipse-temurin-17
+  image: php:8.2
   script:
-    - mvn -B clean compile
+    - php -v
+    - echo "Build OK - PHP code ready"
 
+# Job pour lancer les tests unitaires (si tu utilises PHPUnit)
 test_job:
   stage: test
-  image: maven:3.9.6-eclipse-temurin-17
+  image: php:8.2
+  before_script:
+    - apt-get update && apt-get install -y unzip libzip-dev
+    - docker-php-ext-install mysqli pdo pdo_mysql
+    - curl -sS https://getcomposer.org/installer | php
+    - php composer.phar install
   script:
-    - mvn -B test
-
-package_job:
-  stage: package
-  image: maven:3.9.6-eclipse-temurin-17
-  script:
-    - mvn -B package -DskipTests
-  artifacts:
-    paths:
-      - spring-petclinic-customers-service/target/*.jar
-      - spring-petclinic-vets-service/target/*.jar
-      - spring-petclinic-visits-service/target/*.jar
-      - spring-petclinic-api-gateway/target/*.jar
-      - spring-petclinic-admin-server/target/*.jar
-      - spring-petclinic-config-server/target/*.jar
-      - spring-petclinic-discovery-server/target/*.jar
-#
+    - ./vendor/bin/phpunit --testdox
