@@ -30,3 +30,6 @@ test_job:
     - mvn test --batch-mode
   dependencies:
     - build_job
+
+    # Mise à jour du pipeline
+
