@@ -2,6 +2,7 @@ stages:
   - build
   - test
   - quality
+  - autofix
 
 build_job:
   stage: build
@@ -33,3 +34,14 @@ code_quality_job:
   artifacts:
     paths:
       - phpcs.xml
+
+auto_fix_job:
+  stage: autofix
+  image: php:8.2
+  script:
+    - apt-get update && apt-get install -y unzip git libzip-dev
+    - docker-php-ext-install zip
+    - php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+    - php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+    - composer global require "squizlabs/php_codesniffer=*"
+    - ~/.composer/vendor/bin/phpcbf --standard=PSR12 .
