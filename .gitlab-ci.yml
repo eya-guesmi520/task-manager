@@ -1,4 +1,4 @@
-bstages:
+stages:
   - build
   - test
   - quality
