@@ -45,4 +45,3 @@ auto_fix_job:
     - php composer-setup.php --install-dir=/usr/local/bin --filename=composer
     - composer global require "squizlabs/php_codesniffer=*"
     - ~/.composer/vendor/bin/phpcbf --standard=PSR12 .
-#
