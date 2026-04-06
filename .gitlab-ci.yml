@@ -52,4 +52,14 @@ code_quality_job:
   artifacts:
     paths:
       - codequality-results/
-#
+
+package_job:
+  stage: package
+  image: eclipse-temurin:17-jdk-alpine
+  script:
+    - ./mvnw package \
+        -Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository \
+        --batch-mode --errors --fail-at-end --show-version
+  artifacts:
+    paths:
+      - target/*.jar
