@@ -1,38 +1,52 @@
 stages:
-  - build
-  - test
-  - package
-
-variables:
-  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+    - build
+    - test
+    - quality
+    - package
 
 cache:
-  paths:
+    paths:
     - .m2/repository
+    key: "$CI_JOB_NAME"
 
 build_job:
   stage: build
-  image: maven:3.9.6-eclipse-temurin-17
+  image: eclipse-temurin:17-jdk-alpine
   script:
-    - mvn -B clean compile
+    - ./mvnw compile
+      -Dhttps.protocols=TLSv1.2
+      -Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository
+      -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=WARN
+      -Dorg.slf4j.simpleLogger.showDateTime=true
+      -Djava.awt.headless=true
+      --batch-mode --errors --fail-at-end --show-version -DinstallAtEnd=true -DdeployAtEnd=true
 
 test_job:
   stage: test
-  image: maven:3.9.6-eclipse-temurin-17
+  image: eclipse-temurin:17-jdk-alpine
   script:
-    - mvn -B test
+    - ./mvnw test
+      -Dhttps.protocols=TLSv1.2
+      -Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository
+      -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=WARN
+      -Dorg.slf4j.simpleLogger.showDateTime=true
+      -Djava.awt.headless=true
+      --batch-mode --errors --fail-at-end --show-version -DinstallAtEnd=true -DdeployAtEnd=true
 
-package_job:
-  stage: package
-  image: maven:3.9.6-eclipse-temurin-17
+code_quality_job:
+  stage: quality
+  allow_failure: true
+  image: docker:stable
+  services:
+    - docker:dind
   script:
-    - mvn -B package -DskipTests
+    - mkdir codequality-results
+    - docker run
+        --env CODECLIMATE_CODE="$PWD"
+        --volume "$PWD":/code
+        --volume /var/run/docker.sock:/var/run/docker.sock
+        --volume /tmp/cc:/tmp/cc
+        codeclimate/codeclimate analyze -f html > ./codequality-results/index.html
   artifacts:
     paths:
-      - spring-petclinic-customers-service/target/*.jar
-      - spring-petclinic-vets-service/target/*.jar
-      - spring-petclinic-visits-service/target/*.jar
-      - spring-petclinic-api-gateway/target/*.jar
-      - spring-petclinic-admin-server/target/*.jar
-      - spring-petclinic-config-server/target/*.jar
-      - spring-petclinic-discovery-server/target/*.jar
+      - codequality-results/
