@@ -1,32 +1,31 @@
-stages:
+bstages:
   - build
   - test
   - quality
 
-# Étape build : installer Composer et dépendances
 build_job:
   stage: build
   image: php:8.2
   script:
-    - apt-get update && apt-get install -y unzip git php-zip
+    - apt-get update && apt-get install -y unzip git
+    - docker-php-ext-install zip
     - php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
     - php composer-setup.php --install-dir=/usr/local/bin --filename=composer
     - if [ -f composer.json ]; then composer install; else echo "No composer.json, skipping composer install"; fi
 
-# Étape test : exécuter PHPUnit si dispo, sinon vérifier syntaxe PHP
 test_job:
   stage: test
   image: php:8.2
   script:
     - if [ -f vendor/bin/phpunit ]; then ./vendor/bin/phpunit --testdox; else php -l index.php; fi
 
-# Étape qualité : installer et lancer PHP_CodeSniffer
 code_quality_job:
   stage: quality
   allow_failure: true
   image: php:8.2
   script:
-    - apt-get update && apt-get install -y unzip git php-zip
+    - apt-get update && apt-get install -y unzip git
+    - docker-php-ext-install zip
     - php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
     - php composer-setup.php --install-dir=/usr/local/bin --filename=composer
     - composer global require "squizlabs/php_codesniffer=*"
