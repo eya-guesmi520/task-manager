@@ -2,13 +2,23 @@ stages:
   - build
   - test
   - quality
+  - package
+
+variables:
+  MYSQL_DATABASE: employee_db
+  MYSQL_ROOT_PASSWORD: root
+  COMPOSER_CACHE_DIR: "$CI_PROJECT_DIR/.composer"
+
+cache:
+  paths:
+    - .composer/
 
 build_job:
   stage: build
   image: php:8.2
   script:
     - apt-get update && apt-get install -y unzip git
-    - docker-php-ext-install zip
+    - docker-php-ext-install zip mysqli pdo_mysql
     - php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
     - php composer-setup.php --install-dir=/usr/local/bin --filename=composer
     - if [ -f composer.json ]; then composer install; else echo "No composer.json, skipping composer install"; fi
@@ -16,20 +26,20 @@ build_job:
 test_job:
   stage: test
   image: php:8.2
-  script:
-    - if [ -f vendor/bin/phpunit ]; then ./vendor/bin/phpunit --testdox; else php -l index.php; fi
+  services:
+    - mysql:8.0
   variables:
     MYSQL_HOST: mysql
-    MYSQL_USER: root
-    MYSQL_PASSWORD: root
+    MYSQL_ROOT_PASSWORD: root
     MYSQL_DATABASE: employee_db
   before_script:
     - docker-php-ext-install mysqli pdo_mysql
     - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
     - composer install --no-interaction
-    - php -r "new mysqli(getenv('MYSQL_HOST'), getenv('MYSQL_USER'), getenv('MYSQL_PASSWORD'), getenv('MYSQL_DATABASE'));"
+    # Vérification connexion MySQL
+    - php -r "new mysqli(getenv('MYSQL_HOST'), 'root', getenv('MYSQL_ROOT_PASSWORD'), getenv('MYSQL_DATABASE'));"
   script:
-    - ./vendor/bin/phpunit --colors=always
+    - if [ -f vendor/bin/phpunit ]; then ./vendor/bin/phpunit --colors=always; else php -l index.php; fi
 
 code_quality_job:
   stage: quality
