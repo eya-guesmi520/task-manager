@@ -1,69 +1,29 @@
-stages:
-  - build
-  - test
-  - quality
-  - package
+image: php:8.2-cli
+
+services:
+  - mysql:8.0
 
 variables:
-  MYSQL_DATABASE: employee_db
   MYSQL_ROOT_PASSWORD: root
-  COMPOSER_CACHE_DIR: "$CI_PROJECT_DIR/.composer"
+  MYSQL_DATABASE: employee_db
+  MYSQL_USER: user
+  MYSQL_PASSWORD: password
 
 cache:
   paths:
-    - .composer/
+    - vendor/
 
-build_job:
-  stage: build
-  image: php:8.2-cli
-  before_script:
-    - apt-get update && apt-get install -y unzip git libzip-dev
-    - docker-php-ext-install zip mysqli pdo_mysql
-    - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-  script:
-    - if [ -f composer.json ]; then composer install --no-interaction --prefer-dist --optimize-autoloader; else echo "No composer.json, skipping"; fi
+before_script:
+  - apt-get update -y && apt-get install -y unzip git libzip-dev
+  - docker-php-ext-install zip mysqli pdo_mysql
+  - composer install --prefer-dist --no-interaction --no-progress
+
+stages:
+  - test
 
 test_job:
   stage: test
-  image: php:8.2-cli
-  services:
-    - name: mysql:8.0
-      alias: mysql
-  variables:
-    MYSQL_HOST: mysql
-    MYSQL_ROOT_PASSWORD: root
-    MYSQL_DATABASE: employee_db
-  before_script:
-    - apt-get update && apt-get install -y unzip git libzip-dev
-    - docker-php-ext-install zip mysqli pdo_mysql
-    - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-    - composer install --no-interaction
-    # Attendre que MySQL soit prêt
-    - until mysql -h"$MYSQL_HOST" -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1;" &> /dev/null; do echo "Waiting for MySQL..."; sleep 5; done
   script:
-    - if [ -f vendor/bin/phpunit ]; then ./vendor/bin/phpunit --colors=always; else php -l index.php; fi
-
-code_quality_job:
-  stage: quality
-  image: php:8.2-cli
-  allow_failure: true
-  before_script:
-    - apt-get update && apt-get install -y unzip git libzip-dev
-    - docker-php-ext-install zip mysqli pdo_mysql
-    - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-    - composer install --no-interaction
-  script:
-    - ./vendor/bin/phpcs --standard=PSR12 app/ inc/ *.php
-    - ./vendor/bin/phpmd app/,inc/,*.php text cleancode,codesize,controversial,design,naming,unusedcode
-
-package_job:
-  stage: package
-  image: docker:stable
-  services:
-    - docker:dind
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-  script:
-    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
-    - docker build -t $CI_REGISTRY_IMAGE:latest .
-    - docker push $CI_REGISTRY_IMAGE:latest
+    - php artisan migrate --force
+    - vendor/bin/phpunit --colors=always
+  timeout: 30m
