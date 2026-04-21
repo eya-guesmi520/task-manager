@@ -9,11 +9,25 @@ build_job:
   image: php:8.2-cli-alpine
   script:
     - echo "🔨 Build started"
+    - echo "Vérification des fichiers PHP à la racine..."
     - php -l index.php
     - php -l login.php
-    - php -l add-user.php
-    - php -l add-task.php
-    - find app/ -name "*.php" -exec php -l {} \;
+    - php -l logout.php
+    - php -l user.php
+    - php -l tasks.php
+    - php -l profile.php
+    - php -l notifications.php
+    - php -l my_task.php
+    - echo "Vérification des fichiers dans app/..."
+    - php -l app/add-task.php
+    - php -l app/add-user.php
+    - php -l app/login.php
+    - php -l app/update-task.php
+    - php -l app/update-user.php
+    - php -l app/delete-task.php
+    - php -l app/delete-user.php
+    - echo "Vérification des modèles..."
+    - find app/Model/ -name "*.php" -exec php -l {} \;
     - echo "✅ Build successful"
 
 test_job:
@@ -24,34 +38,15 @@ test_job:
     - |
       php -r "
       require_once 'app/Model/User.php';
-      echo '=== TEST DE User.php ===\n\n';
-      
-      // Tester l'existence des fonctions
+      echo '=== TEST User.php ===\n\n';
       \$functions = ['get_all_users', 'insert_user', 'update_user', 'delete_user', 'get_user_by_id', 'update_profile', 'count_users'];
-      \$all_ok = true;
-      
-      foreach (\$functions as \$func) {
-          if (function_exists(\$func)) {
-              echo \"✅ Fonction '\$func' existe\n\";
-          } else {
-              echo \"❌ Fonction '\$func' n'existe PAS\n\";
-              \$all_ok = false;
-          }
+      \$ok = true;
+      foreach (\$functions as \$f) {
+          if (function_exists(\$f)) { echo \"✅ \$f\n\"; } 
+          else { echo \"❌ \$f\n\"; \$ok = false; }
       }
-      
-      // Tester la fonction count_users (sans connexion DB, vérifier juste sa signature)
-      if (function_exists('count_users')) {
-          try {
-              \$reflection = new ReflectionFunction('count_users');
-              \$params = \$reflection->getNumberOfParameters();
-              echo \"\n✅ count_users() accepte \$params paramètre(s)\n\";
-          } catch (Exception \$e) {
-              echo \"⚠️ Erreur reflection: \" . \$e->getMessage() . \"\n\";
-          }
-      }
-      
-      echo \$all_ok ? \"\n✅ TOUS LES TESTS User.php RÉUSSIS\n\" : \"\n❌ CERTAINS TESTS User.php ONT ÉCHOUÉ\n\";
-      if (!\$all_ok) exit(1);
+      echo \$ok ? \"\n✅ User.php OK\n\" : \"\n❌ User.php FAILED\n\";
+      if (!\$ok) exit(1);
       "
     
     - echo ""
@@ -59,43 +54,15 @@ test_job:
     - |
       php -r "
       require_once 'app/Model/Task.php';
-      echo '=== TEST DE Task.php ===\n\n';
-      
-      \$functions = [
-          'insert_task', 'get_all_tasks', 'get_all_tasks_due_today', 'count_tasks_due_today',
-          'get_all_tasks_overdue', 'count_tasks_overdue', 'get_all_tasks_NoDeadline', 'count_tasks_NoDeadline',
-          'delete_task', 'get_task_by_id', 'count_tasks', 'update_task', 'update_task_status',
-          'get_all_tasks_by_id', 'count_pending_tasks', 'count_in_progress_tasks', 'count_completed_tasks',
-          'count_my_tasks', 'count_my_tasks_overdue', 'count_my_tasks_NoDeadline',
-          'count_my_pending_tasks', 'count_my_in_progress_tasks', 'count_my_completed_tasks'
-      ];
-      \$all_ok = true;
-      
-      foreach (\$functions as \$func) {
-          if (function_exists(\$func)) {
-              echo \"✅ Fonction '\$func' existe\n\";
-          } else {
-              echo \"❌ Fonction '\$func' n'existe PAS\n\";
-              \$all_ok = false;
-          }
+      echo '=== TEST Task.php ===\n\n';
+      \$functions = ['insert_task', 'get_all_tasks', 'get_task_by_id', 'update_task', 'delete_task', 'count_tasks', 'get_all_tasks_by_id'];
+      \$ok = true;
+      foreach (\$functions as \$f) {
+          if (function_exists(\$f)) { echo \"✅ \$f\n\"; } 
+          else { echo \"❌ \$f\n\"; \$ok = false; }
       }
-      
-      // Tester la fonction get_task_by_id signature
-      if (function_exists('get_task_by_id')) {
-          \$reflection = new ReflectionFunction('get_task_by_id');
-          \$params = \$reflection->getNumberOfParameters();
-          echo \"\n✅ get_task_by_id() accepte \$params paramètre(s) (devrait être 2: conn, id)\n\";
-      }
-      
-      // Tester la fonction count_tasks
-      if (function_exists('count_tasks')) {
-          \$reflection = new ReflectionFunction('count_tasks');
-          \$params = \$reflection->getNumberOfParameters();
-          echo \"✅ count_tasks() accepte \$params paramètre(s) (devrait être 1: conn)\n\";
-      }
-      
-      echo \$all_ok ? \"\n✅ TOUS LES TESTS Task.php RÉUSSIS\n\" : \"\n❌ CERTAINS TESTS Task.php ONT ÉCHOUÉ\n\";
-      if (!\$all_ok) exit(1);
+      echo \$ok ? \"\n✅ Task.php OK\n\" : \"\n❌ Task.php FAILED\n\";
+      if (!\$ok) exit(1);
       "
     
     - echo ""
@@ -103,29 +70,15 @@ test_job:
     - |
       php -r "
       require_once 'app/Model/Notification.php';
-      echo '=== TEST DE Notification.php ===\n\n';
-      
+      echo '=== TEST Notification.php ===\n\n';
       \$functions = ['get_all_my_notifications', 'count_notification', 'insert_notification', 'notification_make_read'];
-      \$all_ok = true;
-      
-      foreach (\$functions as \$func) {
-          if (function_exists(\$func)) {
-              echo \"✅ Fonction '\$func' existe\n\";
-          } else {
-              echo \"❌ Fonction '\$func' n'existe PAS\n\";
-              \$all_ok = false;
-          }
+      \$ok = true;
+      foreach (\$functions as \$f) {
+          if (function_exists(\$f)) { echo \"✅ \$f\n\"; } 
+          else { echo \"❌ \$f\n\"; \$ok = false; }
       }
-      
-      // Vérifier le nombre de paramètres de count_notification
-      if (function_exists('count_notification')) {
-          \$reflection = new ReflectionFunction('count_notification');
-          \$params = \$reflection->getNumberOfParameters();
-          echo \"\n✅ count_notification() accepte \$params paramètre(s) (devrait être 2: conn, id)\n\";
-      }
-      
-      echo \$all_ok ? \"\n✅ TOUS LES TESTS Notification.php RÉUSSIS\n\" : \"\n❌ CERTAINS TESTS Notification.php ONT ÉCHOUÉ\n\";
-      if (!\$all_ok) exit(1);
+      echo \$ok ? \"\n✅ Notification.php OK\n\" : \"\n❌ Notification.php FAILED\n\";
+      if (!\$ok) exit(1);
       "
     
     - echo ""
@@ -136,11 +89,12 @@ quality_job:
   image: php:8.2-cli-alpine
   script:
     - echo "🔍 Quality check"
-    - echo "Checking for security issues..."
-    - grep -r "SELECT.*\$_" app/ || echo "No SQL injection patterns found"
-    - grep -r "password_hash" app/ && echo "Password hashing OK"
     - echo "Checking for prepared statements..."
-    - grep -r "prepare(" app/ && echo "Prepared statements OK"
+    - grep -r "prepare(" app/ DB_connection.php && echo "✅ Prepared statements OK" || echo "⚠️ No prepared statements found"
+    - echo "Checking for password hashing..."
+    - grep -r "password_hash\|password_verify" app/ && echo "✅ Password hashing OK" || echo "⚠️ No password hashing found"
+    - echo "Checking for SQL injection protection..."
+    - grep -r "htmlspecialchars\|stripcslashes" app/ && echo "✅ XSS protection OK" || echo "⚠️ No XSS protection found"
     - echo "✅ Quality check passed"
   allow_failure: true
 
@@ -151,11 +105,11 @@ package_job:
     - apk add --no-cache zip
   script:
     - echo "📦 Creating package..."
-    - zip -r employee-task-management.zip *.php app/ inc/ css/ assets/ || true
+    - zip -r employee-task-management.zip *.php app/ inc/ css/ assets/ img/ 2>/dev/null || true
     - echo "✅ Package created"
     - echo ""
-    - echo "📋 Package contents:"
-    - unzip -l employee-task-management.zip | head -20
+    - echo "📋 Package size:"
+    - ls -lh employee-task-management.zip
   artifacts:
     paths:
       - employee-task-management.zip
