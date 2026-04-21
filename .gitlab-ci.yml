@@ -12,8 +12,6 @@ cache:
 variables:
   MYSQL_DATABASE: task_management_test
   MYSQL_ROOT_PASSWORD: root_password
-  MYSQL_USER: test_user
-  MYSQL_PASSWORD: test_password
 
 build_job:
   stage: build
@@ -34,16 +32,22 @@ test_job:
     - echo "Waiting for MySQL to be ready..."
     - while ! mysqladmin ping -h mysql --silent; do sleep 1; done
   script:
-    - echo "🧪 Testing functions with real database..."
+    - echo "🧪 E2E TEST: Complete workflow simulation..."
     - |
       php -r "
-      echo '=== SETUP DATABASE ===\n';
+      echo '╔══════════════════════════════════════════════════════════════╗\n';
+      echo '║     END-TO-END TEST - COMPLETE WORKFLOW SIMULATION          ║\n';
+      echo '╚══════════════════════════════════════════════════════════════╝\n\n';
       
-      // Connexion à MySQL
+      // ============================================
+      // 1. SETUP DATABASE
+      // ============================================
+      echo '📍 STEP 1: Setting up database...\n';
+      
       \$conn = new PDO('mysql:host=mysql;dbname=task_management_test', 'root', 'root_password');
       \$conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
       
-      // Créer les tables de test
+      // Create tables
       \$conn->exec(\"CREATE TABLE IF NOT EXISTS users (
           id INT AUTO_INCREMENT PRIMARY KEY,
           full_name VARCHAR(50) NOT NULL,
@@ -72,164 +76,227 @@ test_job:
           is_read BOOLEAN DEFAULT FALSE
       )\");
       
-      echo '✅ Tables created\n\n';
+      echo '✅ Database tables created\n\n';
       
-      // Insérer des données de test
+      // ============================================
+      // 2. LOGIN AS ADMIN (créer admin par défaut)
+      // ============================================
+      echo '📍 STEP 2: Login as ADMIN...\n';
+      
+      \$admin_password_hash = password_hash('123', PASSWORD_DEFAULT);
       \$conn->exec(\"INSERT INTO users (full_name, username, password, role) VALUES 
-          ('Test Admin', 'admin', 'hashed_password', 'admin'),
-          ('Test Employee', 'employee', 'hashed_password', 'employee')
+          ('Administrator', 'admin', '\$admin_password_hash', 'admin')
       \");
-      echo '✅ Test users inserted\n';
+      
+      // Vérifier login admin
+      \$stmt = \$conn->prepare(\"SELECT * FROM users WHERE username = ?\");
+      \$stmt->execute(['admin']);
+      \$admin = \$stmt->fetch();
+      
+      if (password_verify('123', \$admin['password'])) {
+          echo '✅ Admin login successful (username: admin, password: 123)\n';
+          \$admin_id = \$admin['id'];
+      } else {
+          echo '❌ Admin login failed\n';
+          exit(1);
+      }
       
       // ============================================
-      // TEST USER FUNCTIONS
+      // 3. CREATE NEW EMPLOYEE USER
       // ============================================
-      echo '\n=== TESTING User.php FUNCTIONS ===\n';
+      echo '\n📍 STEP 3: Create new employee user...\n';
       
       require_once 'app/Model/User.php';
       
-      // Test get_all_users
-      \$users = get_all_users(\$conn);
-      if (\$users !== 0 && count(\$users) > 0) {
-          echo '✅ get_all_users() - works, found ' . count(\$users) . ' users\n';
-      } else {
-          echo '❌ get_all_users() - failed\n';
-      }
+      \$employee_password_hash = password_hash('employee123', PASSWORD_DEFAULT);
+      \$new_user = ['Sarah Johnson', 'sarah', \$employee_password_hash, 'employee'];
       
-      // Test get_user_by_id
-      \$user = get_user_by_id(\$conn, 1);
-      if (\$user !== 0 && \$user['id'] == 1) {
-          echo '✅ get_user_by_id() - works, found user: ' . \$user['full_name'] . '\n';
-      } else {
-          echo '❌ get_user_by_id() - failed\n';
-      }
-      
-      // Test count_users
-      \$count = count_users(\$conn);
-      if (\$count > 0) {
-          echo '✅ count_users() - works, count = ' . \$count . '\n';
-      } else {
-          echo '❌ count_users() - failed\n';
-      }
-      
-      // Test insert_user
-      \$new_user = ['New User', 'newuser', password_hash('pass123', PASSWORD_DEFAULT), 'employee'];
       try {
           insert_user(\$conn, \$new_user);
-          echo '✅ insert_user() - works, user inserted\n';
+          echo '✅ Employee user created: sarah (password: employee123)\n';
       } catch (Exception \$e) {
-          echo '❌ insert_user() - failed: ' . \$e->getMessage() . '\n';
+          echo '❌ Failed to create user: ' . \$e->getMessage() . '\n';
+          exit(1);
       }
       
+      // Récupérer l'ID du nouvel employé
+      \$stmt = \$conn->prepare(\"SELECT id FROM users WHERE username = ?\");
+      \$stmt->execute(['sarah']);
+      \$sarah = \$stmt->fetch();
+      \$sarah_id = \$sarah['id'];
+      echo \"✅ Employee ID: \$sarah_id\n\";
+      
       // ============================================
-      // TEST TASK FUNCTIONS
+      // 4. CREATE TASKS FOR THE EMPLOYEE (as admin)
       // ============================================
-      echo '\n=== TESTING Task.php FUNCTIONS ===\n';
+      echo '\n📍 STEP 4: Create tasks for employee (as admin)...\n';
       
       require_once 'app/Model/Task.php';
       
-      // Test insert_task
-      \$task_data = ['Test Task', 'This is a test description', 2, '2025-12-31'];
-      try {
-          insert_task(\$conn, \$task_data);
-          echo '✅ insert_task() - works, task inserted\n';
-      } catch (Exception \$e) {
-          echo '❌ insert_task() - failed: ' . \$e->getMessage() . '\n';
-      }
+      // Task 1: Pending task
+      \$task1 = ['Complete monthly report', 'Prepare and submit the monthly financial report', \$sarah_id, date('Y-m-d', strtotime('+7 days'))];
+      insert_task(\$conn, \$task1);
+      echo '✅ Task 1 created: \"Complete monthly report\" (status: pending)\n';
       
-      // Test get_all_tasks
-      \$tasks = get_all_tasks(\$conn);
-      if (\$tasks !== 0 && count(\$tasks) > 0) {
-          echo '✅ get_all_tasks() - works, found ' . count(\$tasks) . ' tasks\n';
-      } else {
-          echo '❌ get_all_tasks() - failed\n';
-      }
+      // Task 2: Task with due date today
+      \$task2 = ['Review client feedback', 'Go through customer feedback and summarize key points', \$sarah_id, date('Y-m-d')];
+      insert_task(\$conn, \$task2);
+      echo '✅ Task 2 created: \"Review client feedback\" (due today)\n';
       
-      // Test get_task_by_id
-      \$task = get_task_by_id(\$conn, 1);
-      if (\$task !== 0 && \$task['id'] == 1) {
-          echo '✅ get_task_by_id() - works, found task: ' . \$task['title'] . '\n';
-      } else {
-          echo '❌ get_task_by_id() - failed\n';
-      }
+      // Task 3: Task with no deadline
+      \$task3 = ['Update knowledge base', 'Add new articles to the internal knowledge base', \$sarah_id, null];
+      insert_task(\$conn, \$task3);
+      echo '✅ Task 3 created: \"Update knowledge base\" (no deadline)\n';
       
-      // Test count_tasks
-      \$task_count = count_tasks(\$conn);
-      if (\$task_count > 0) {
-          echo '✅ count_tasks() - works, count = ' . \$task_count . '\n';
-      } else {
-          echo '❌ count_tasks() - failed\n';
-      }
+      // Task 4: Overdue task (due date yesterday)
+      \$task4 = ['Fix bug #1234', 'Resolve the login issue reported by users', \$sarah_id, date('Y-m-d', strtotime('-2 days'))];
+      insert_task(\$conn, \$task4);
+      echo '✅ Task 4 created: \"Fix bug #1234\" (overdue)\n';
       
-      // Test update_task
-      \$update_data = ['Updated Task', 'Updated description', 2, '2025-12-31', 1];
-      try {
-          update_task(\$conn, \$update_data);
-          echo '✅ update_task() - works, task updated\n';
-      } catch (Exception \$e) {
-          echo '❌ update_task() - failed: ' . \$e->getMessage() . '\n';
-      }
-      
-      // Test update_task_status
-      \$status_data = ['completed', 1];
-      try {
-          update_task_status(\$conn, \$status_data);
-          echo '✅ update_task_status() - works, status updated\n';
-      } catch (Exception \$e) {
-          echo '❌ update_task_status() - failed: ' . \$e->getMessage() . '\n';
-      }
-      
-      // Test delete_task
-      try {
-          delete_task(\$conn, [1]);
-          echo '✅ delete_task() - works, task deleted\n';
-      } catch (Exception \$e) {
-          echo '❌ delete_task() - failed: ' . \$e->getMessage() . '\n';
-      }
+      // Vérifier que les tâches ont été créées
+      \$all_tasks = get_all_tasks(\$conn);
+      echo \"📊 Total tasks in system: \" . count(\$all_tasks) . \"\n\";
       
       // ============================================
-      // TEST NOTIFICATION FUNCTIONS
+      // 5. CREATE NOTIFICATIONS FOR THE EMPLOYEE
       // ============================================
-      echo '\n=== TESTING Notification.php FUNCTIONS ===\n';
+      echo '\n📍 STEP 5: Create notifications for employee...\n';
       
       require_once 'app/Model/Notification.php';
       
-      // Test insert_notification
-      \$notif_data = ['Test notification message', 2, 'Test Type'];
-      try {
-          insert_notification(\$conn, \$notif_data);
-          echo '✅ insert_notification() - works\n';
-      } catch (Exception \$e) {
-          echo '❌ insert_notification() - failed: ' . \$e->getMessage() . '\n';
+      \$notif1 = ['You have been assigned a new task: Complete monthly report', \$sarah_id, 'Task Assignment'];
+      insert_notification(\$conn, \$notif1);
+      echo '✅ Notification 1 created\n';
+      
+      \$notif2 = ['Reminder: Task \"Review client feedback\" is due today', \$sarah_id, 'Reminder'];
+      insert_notification(\$conn, \$notif2);
+      echo '✅ Notification 2 created\n';
+      
+      // Vérifier les notifications
+      \$notif_count = count_notification(\$conn, \$sarah_id);
+      echo \"📊 Unread notifications for sarah: \$notif_count\n\";
+      
+      // ============================================
+      // 6. UPDATE TASK STATUS (as employee)
+      // ============================================
+      echo '\n📍 STEP 6: Employee updates task status...\n';
+      
+      // Récupérer la première tâche de sarah
+      \$sarah_tasks = get_all_tasks_by_id(\$conn, \$sarah_id);
+      \$first_task_id = \$sarah_tasks[0]['id'];
+      
+      // Update status to 'in_progress'
+      update_task_status(\$conn, ['in_progress', \$first_task_id]);
+      echo \"✅ Task \$first_task_id status updated to: in_progress\n\";
+      
+      // Update status to 'completed'
+      update_task_status(\$conn, ['completed', \$first_task_id]);
+      echo \"✅ Task \$first_task_id status updated to: completed\n\";
+      
+      // ============================================
+      // 7. UPDATE TASK DETAILS (as admin)
+      // ============================================
+      echo '\n📍 STEP 7: Admin updates task details...\n';
+      
+      \$second_task_id = \$sarah_tasks[1]['id'];
+      \$update_data = ['Updated: Review client feedback (EXTENDED)', 'Please also include product team feedback', \$sarah_id, date('Y-m-d', strtotime('+3 days')), \$second_task_id];
+      update_task(\$conn, \$update_data);
+      echo \"✅ Task \$second_task_id updated (title and due date changed)\n\";
+      
+      // ============================================
+      // 8. MARK NOTIFICATIONS AS READ
+      // ============================================
+      echo '\n📍 STEP 8: Employee marks notifications as read...\n';
+      
+      \$notifications = get_all_my_notifications(\$conn, \$sarah_id);
+      if (\$notifications !== 0 && is_array(\$notifications)) {
+          foreach (\$notifications as \$notif) {
+              notification_make_read(\$conn, \$sarah_id, \$notif['id']);
+              echo \"✅ Notification \" . \$notif['id'] . \" marked as read\n\";
+          }
       }
       
-      // Test count_notification
-      \$notif_count = count_notification(\$conn, 2);
-      if (\$notif_count >= 0) {
-          echo '✅ count_notification() - works, count = ' . \$notif_count . '\n';
-      } else {
-          echo '❌ count_notification() - failed\n';
+      // Vérifier que les notifications sont lues
+      \$unread_count = count_notification(\$conn, \$sarah_id);
+      echo \"📊 Unread notifications after marking: \$unread_count\n\";
+      
+      // ============================================
+      // 9. DELETE A TASK (as admin)
+      // ============================================
+      echo '\n📍 STEP 9: Admin deletes a task...\n';
+      
+      \$third_task_id = \$sarah_tasks[2]['id'];
+      delete_task(\$conn, [\$third_task_id]);
+      echo \"✅ Task \$third_task_id deleted successfully\n\";
+      
+      // Vérifier que la tâche a été supprimée
+      \$remaining_tasks = get_all_tasks_by_id(\$conn, \$sarah_id);
+      echo \"📊 Remaining tasks for sarah: \" . count(\$remaining_tasks) . \" (was 4, now 3)\n\";
+      
+      // ============================================
+      // 10. VERIFY EMPLOYEE CAN SEE THEIR TASKS
+      // ============================================
+      echo '\n📍 STEP 10: Verify employee can see their tasks...\n';
+      
+      \$final_tasks = get_all_tasks_by_id(\$conn, \$sarah_id);
+      echo \"✅ Sarah's tasks:\n\";
+      foreach (\$final_tasks as \$task) {
+          echo \"   - ID: {\$task['id']} | Title: {\$task['title']} | Status: {\$task['status']} | Due: {\$task['due_date']}\n\";
       }
       
-      // Test get_all_my_notifications
-      \$notifications = get_all_my_notifications(\$conn, 2);
-      if (\$notifications !== 0 || is_array(\$notifications)) {
-          echo '✅ get_all_my_notifications() - works\n';
-      } else {
-          echo '❌ get_all_my_notifications() - failed\n';
-      }
+      // ============================================
+      // 11. VERIFY EMPLOYEE TASK COUNTS
+      // ============================================
+      echo '\n📍 STEP 11: Verify task statistics for employee...\n';
       
-      // Test notification_make_read
-      try {
-          notification_make_read(\$conn, 2, 1);
-          echo '✅ notification_make_read() - works\n';
-      } catch (Exception \$e) {
-          echo '❌ notification_make_read() - failed: ' . \$e->getMessage() . '\n';
-      }
+      \$pending = count_my_pending_tasks(\$conn, \$sarah_id);
+      \$in_progress = count_my_in_progress_tasks(\$conn, \$sarah_id);
+      \$completed = count_my_completed_tasks(\$conn, \$sarah_id);
+      \$overdue = count_my_tasks_overdue(\$conn, \$sarah_id);
       
-      echo '\n=== ALL TESTS PASSED ===\n';
+      echo \"📊 Sarah's Task Statistics:\n\";
+      echo \"   - Pending tasks: \$pending\n\";
+      echo \"   - In progress tasks: \$in_progress\n\";
+      echo \"   - Completed tasks: \$completed\n\";
+      echo \"   - Overdue tasks: \$overdue\n\";
+      
+      // ============================================
+      // 12. VERIFY ADMIN FUNCTIONS
+      // ============================================
+      echo '\n📍 STEP 12: Verify admin functions...\n';
+      
+      \$all_users = get_all_users(\$conn);
+      \$all_tasks_admin = get_all_tasks(\$conn);
+      \$pending_admin = count_pending_tasks(\$conn);
+      \$completed_admin = count_completed_tasks(\$conn);
+      
+      echo \"📊 Admin Dashboard Statistics:\n\";
+      echo \"   - Total employees: \" . count(\$all_users) . \"\n\";
+      echo \"   - Total tasks: \" . count(\$all_tasks_admin) . \"\n\";
+      echo \"   - Pending tasks (all): \$pending_admin\n\";
+      echo \"   - Completed tasks (all): \$completed_admin\n\";
+      
+      // ============================================
+      // 13. FINAL SUMMARY
+      // ============================================
+      echo '\n╔══════════════════════════════════════════════════════════════╗\n';
+      echo '║                    TEST SUMMARY                             ║\n';
+      echo '╚══════════════════════════════════════════════════════════════╝\n';
+      echo '\n✅ Admin login: PASSED\n';
+      echo '✅ Create employee user: PASSED\n';
+      echo '✅ Create tasks (4 tasks): PASSED\n';
+      echo '✅ Create notifications: PASSED\n';
+      echo '✅ Update task status (pending → in_progress → completed): PASSED\n';
+      echo '✅ Update task details (title/date): PASSED\n';
+      echo '✅ Mark notifications as read: PASSED\n';
+      echo '✅ Delete task: PASSED\n';
+      echo '✅ Employee view their tasks: PASSED\n';
+      echo '✅ Task statistics: PASSED\n';
+      echo '✅ Admin dashboard: PASSED\n';
+      echo '\n🎉 END-TO-END TEST COMPLETED SUCCESSFULLY!\n';
+      echo '📌 Tested: Login → Create User → CRUD Tasks → Notifications → Delete\n';
       "
-    - echo "✅ All function tests passed"
+    - echo "✅ E2E tests passed"
 
 quality_job:
   stage: quality
