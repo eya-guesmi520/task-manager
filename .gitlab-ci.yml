@@ -4,15 +4,6 @@ stages:
   - quality
   - package
 
-cache:
-  paths:
-    - vendor/
-  key: "$CI_JOB_NAME"
-
-variables:
-  MYSQL_DATABASE: task_management_test
-  MYSQL_ROOT_PASSWORD: root_password
-
 build_job:
   stage: build
   image: php:8.2-cli-alpine
@@ -32,14 +23,17 @@ test_job:
     - sleep 10
   script:
     - echo "E2E TEST START"
-    - php -r '$conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); echo "DB Connected";'
-    - php -r '$conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $conn->exec("CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, full_name VARCHAR(50) NOT NULL, username VARCHAR(50) NOT NULL, password VARCHAR(255) NOT NULL, role ENUM("admin","employee") NOT NULL)"); echo "Users table OK";'
-    - php -r '$conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $conn->exec("CREATE TABLE IF NOT EXISTS tasks (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(100) NOT NULL, description TEXT, assigned_to INT, due_date DATE, status ENUM("pending","in_progress","completed") DEFAULT "pending")"); echo "Tasks table OK";'
-    - php -r '$conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $conn->exec("CREATE TABLE IF NOT EXISTS notifications (id INT AUTO_INCREMENT PRIMARY KEY, message TEXT NOT NULL, recipient INT NOT NULL, type VARCHAR(50) NOT NULL, date DATE DEFAULT CURRENT_TIMESTAMP, is_read BOOLEAN DEFAULT FALSE)"); echo "Notifications table OK";'
-    - php -r '$hash = password_hash("123", PASSWORD_DEFAULT); $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES ("Administrator", "admin", "$hash", "admin")"); echo "Admin created";'
-    - php -r 'require_once "app/Model/User.php"; $hash = password_hash("employee123", PASSWORD_DEFAULT); $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); insert_user($conn, ["Sarah Johnson", "sarah", $hash, "employee"]); echo "Employee created";'
-    - php -r 'require_once "app/Model/Task.php"; $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $stmt = $conn->query("SELECT id FROM users WHERE username="sarah""); $sarah_id = $stmt->fetch()["id"]; insert_task($conn, ["Complete monthly report", "Prepare financial report", $sarah_id, date("Y-m-d", strtotime("+7 days"))]); echo "Task 1 created";'
-    - php -r 'require_once "app/Model/Task.php"; $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $stmt = $conn->query("SELECT id FROM users WHERE username="sarah""); $sarah_id = $stmt->fetch()["id"]; insert_task($conn, ["Review client feedback", "Summarize feedback", $sarah_id, date("Y-m-d")]); echo "Task 2 created";'
+    - php -r '$conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); echo "DB Connected\n";'
+    - php -r '$conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $conn->exec("CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, full_name VARCHAR(50) NOT NULL, username VARCHAR(50) NOT NULL, password VARCHAR(255) NOT NULL, role ENUM(\"admin\",\"employee\") NOT NULL)"); echo "Users table OK\n";'
+    - php -r '$conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $conn->exec("CREATE TABLE IF NOT EXISTS tasks (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(100) NOT NULL, description TEXT, assigned_to INT, due_date DATE, status ENUM(\"pending\",\"in_progress\",\"completed\") DEFAULT \"pending\")"); echo "Tasks table OK\n";'
+    - php -r '$conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $conn->exec("CREATE TABLE IF NOT EXISTS notifications (id INT AUTO_INCREMENT PRIMARY KEY, message TEXT NOT NULL, recipient INT NOT NULL, type VARCHAR(50) NOT NULL, date DATE DEFAULT CURRENT_TIMESTAMP, is_read BOOLEAN DEFAULT FALSE)"); echo "Notifications table OK\n";'
+    - php -r '$hash = password_hash("123", PASSWORD_DEFAULT); $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES (\"Administrator\", \"admin\", \"$hash\", \"admin\")"); echo "Admin created\n";'
+    - php -r 'require_once "app/Model/User.php"; $hash = password_hash("employee123", PASSWORD_DEFAULT); $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); insert_user($conn, ["Sarah Johnson", "sarah", $hash, "employee"]); echo "Employee created\n";'
+    - php -r 'require_once "app/Model/Task.php"; $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $stmt = $conn->query("SELECT id FROM users WHERE username=\"sarah\""); $sarah_id = $stmt->fetch()["id"]; insert_task($conn, ["Complete monthly report", "Prepare financial report", $sarah_id, date("Y-m-d", strtotime("+7 days"))]); echo "Task 1 created\n";'
+    - php -r 'require_once "app/Model/Task.php"; $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $stmt = $conn->query("SELECT id FROM users WHERE username=\"sarah\""); $sarah_id = $stmt->fetch()["id"]; insert_task($conn, ["Review client feedback", "Summarize feedback", $sarah_id, date("Y-m-d")]); echo "Task 2 created\n";'
+    - php -r 'require_once "app/Model/Task.php"; $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $stmt = $conn->query("SELECT id FROM users WHERE username=\"sarah\""); $sarah_id = $stmt->fetch()["id"]; $tasks = get_all_tasks_by_id($conn, $sarah_id); if(count($tasks)>0) { update_task_status($conn, ["completed", $tasks[0]["id"]]); echo "Task status updated to completed\n"; }'
+    - php -r 'require_once "app/Model/Notification.php"; $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $stmt = $conn->query("SELECT id FROM users WHERE username=\"sarah\""); $sarah_id = $stmt->fetch()["id"]; insert_notification($conn, ["New task assigned", $sarah_id, "Task"]); echo "Notification created\n";'
+    - php -r 'require_once "app/Model/Task.php"; $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $stmt = $conn->query("SELECT id FROM tasks WHERE assigned_to=(SELECT id FROM users WHERE username=\"sarah\") LIMIT 1"); if($task = $stmt->fetch()) { delete_task($conn, [$task["id"]]); echo "Task deleted\n"; }'
     - echo "E2E TESTS COMPLETED"
 
 quality_job:
@@ -48,8 +42,8 @@ quality_job:
   allow_failure: true
   script:
     - echo "Quality check"
-    - grep -r "password_hash" app/ || echo "Missing password_hash"
-    - grep -r "prepare" app/ || echo "Missing prepare"
+    - grep -r "password_hash" app/ && echo "Password hashing OK" || echo "Missing password_hash"
+    - grep -r "prepare" app/ && echo "Prepared statements OK" || echo "Missing prepare"
     - echo "Quality check passed"
 
 package_job:
