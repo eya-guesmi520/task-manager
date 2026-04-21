@@ -18,16 +18,27 @@ build_job:
     - php -l profile.php
     - php -l notifications.php
     - php -l my_task.php
+    - php -l create_task.php
+    - php -l edit-task.php
+    - php -l edit-user.php
+    - php -l edit_profile.php
+    - php -l delete-task.php
+    - php -l delete-user.php
     - echo "Vérification des fichiers dans app/..."
     - php -l app/add-task.php
     - php -l app/add-user.php
     - php -l app/login.php
     - php -l app/update-task.php
     - php -l app/update-user.php
-    - php -l app/delete-task.php
-    - php -l app/delete-user.php
+    - php -l app/update-profile.php
+    - php -l app/update-task-employee.php
+    - php -l app/notification-count.php
+    - php -l app/notification-read.php
+    - php -l app/notification.php
     - echo "Vérification des modèles..."
-    - find app/Model/ -name "*.php" -exec php -l {} \;
+    - php -l app/Model/User.php
+    - php -l app/Model/Task.php
+    - php -l app/Model/Notification.php
     - echo "✅ Build successful"
 
 test_job:
@@ -55,7 +66,7 @@ test_job:
       php -r "
       require_once 'app/Model/Task.php';
       echo '=== TEST Task.php ===\n\n';
-      \$functions = ['insert_task', 'get_all_tasks', 'get_task_by_id', 'update_task', 'delete_task', 'count_tasks', 'get_all_tasks_by_id'];
+      \$functions = ['insert_task', 'get_all_tasks', 'get_task_by_id', 'update_task', 'delete_task', 'count_tasks', 'get_all_tasks_by_id', 'get_all_tasks_due_today', 'get_all_tasks_overdue'];
       \$ok = true;
       foreach (\$functions as \$f) {
           if (function_exists(\$f)) { echo \"✅ \$f\n\"; } 
@@ -93,7 +104,7 @@ quality_job:
     - grep -r "prepare(" app/ DB_connection.php && echo "✅ Prepared statements OK" || echo "⚠️ No prepared statements found"
     - echo "Checking for password hashing..."
     - grep -r "password_hash\|password_verify" app/ && echo "✅ Password hashing OK" || echo "⚠️ No password hashing found"
-    - echo "Checking for SQL injection protection..."
+    - echo "Checking for XSS protection..."
     - grep -r "htmlspecialchars\|stripcslashes" app/ && echo "✅ XSS protection OK" || echo "⚠️ No XSS protection found"
     - echo "✅ Quality check passed"
   allow_failure: true
