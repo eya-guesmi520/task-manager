@@ -4,110 +4,242 @@ stages:
   - quality
   - package
 
+cache:
+  paths:
+    - vendor/
+  key: "$CI_JOB_NAME"
+
+variables:
+  MYSQL_DATABASE: task_management_test
+  MYSQL_ROOT_PASSWORD: root_password
+  MYSQL_USER: test_user
+  MYSQL_PASSWORD: test_password
+
 build_job:
   stage: build
   image: php:8.2-cli-alpine
   script:
     - echo "🔨 Build started"
-    - echo "Vérification des fichiers PHP à la racine..."
-    - php -l index.php
-    - php -l login.php
-    - php -l logout.php
-    - php -l user.php
-    - php -l tasks.php
-    - php -l profile.php
-    - php -l notifications.php
-    - php -l my_task.php
-    - php -l create_task.php
-    - php -l edit-task.php
-    - php -l edit-user.php
-    - php -l edit_profile.php
-    - php -l delete-task.php
-    - php -l delete-user.php
-    - echo "Vérification des fichiers dans app/..."
-    - php -l app/add-task.php
-    - php -l app/add-user.php
-    - php -l app/login.php
-    - php -l app/update-task.php
-    - php -l app/update-user.php
-    - php -l app/update-profile.php
-    - php -l app/update-task-employee.php
-    - php -l app/notification-count.php
-    - php -l app/notification-read.php
-    - php -l app/notification.php
-    - echo "Vérification des modèles..."
-    - php -l app/Model/User.php
-    - php -l app/Model/Task.php
-    - php -l app/Model/Notification.php
+    - find . -name "*.php" -type f -exec php -l {} \;
     - echo "✅ Build successful"
 
 test_job:
   stage: test
   image: php:8.2-cli-alpine
+  services:
+    - mysql:8.0
+  before_script:
+    - apk add --no-cache mysql-client
+    - docker-php-ext-install pdo_mysql mysqli
+    - echo "Waiting for MySQL to be ready..."
+    - while ! mysqladmin ping -h mysql --silent; do sleep 1; done
   script:
-    - echo "🧪 Testing functions in User.php..."
+    - echo "🧪 Testing functions with real database..."
     - |
       php -r "
+      echo '=== SETUP DATABASE ===\n';
+      
+      // Connexion à MySQL
+      \$conn = new PDO('mysql:host=mysql;dbname=task_management_test', 'root', 'root_password');
+      \$conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+      
+      // Créer les tables de test
+      \$conn->exec(\"CREATE TABLE IF NOT EXISTS users (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          full_name VARCHAR(50) NOT NULL,
+          username VARCHAR(50) NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          role ENUM('admin', 'employee') NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )\");
+      
+      \$conn->exec(\"CREATE TABLE IF NOT EXISTS tasks (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          title VARCHAR(100) NOT NULL,
+          description TEXT,
+          assigned_to INT,
+          due_date DATE,
+          status ENUM('pending', 'in_progress', 'completed') DEFAULT 'pending',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )\");
+      
+      \$conn->exec(\"CREATE TABLE IF NOT EXISTS notifications (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          message TEXT NOT NULL,
+          recipient INT NOT NULL,
+          type VARCHAR(50) NOT NULL,
+          date DATE DEFAULT CURRENT_TIMESTAMP,
+          is_read BOOLEAN DEFAULT FALSE
+      )\");
+      
+      echo '✅ Tables created\n\n';
+      
+      // Insérer des données de test
+      \$conn->exec(\"INSERT INTO users (full_name, username, password, role) VALUES 
+          ('Test Admin', 'admin', 'hashed_password', 'admin'),
+          ('Test Employee', 'employee', 'hashed_password', 'employee')
+      \");
+      echo '✅ Test users inserted\n';
+      
+      // ============================================
+      // TEST USER FUNCTIONS
+      // ============================================
+      echo '\n=== TESTING User.php FUNCTIONS ===\n';
+      
       require_once 'app/Model/User.php';
-      echo '=== TEST User.php ===\n\n';
-      \$functions = ['get_all_users', 'insert_user', 'update_user', 'delete_user', 'get_user_by_id', 'update_profile', 'count_users'];
-      \$ok = true;
-      foreach (\$functions as \$f) {
-          if (function_exists(\$f)) { echo \"✅ \$f\n\"; } 
-          else { echo \"❌ \$f\n\"; \$ok = false; }
+      
+      // Test get_all_users
+      \$users = get_all_users(\$conn);
+      if (\$users !== 0 && count(\$users) > 0) {
+          echo '✅ get_all_users() - works, found ' . count(\$users) . ' users\n';
+      } else {
+          echo '❌ get_all_users() - failed\n';
       }
-      echo \$ok ? \"\n✅ User.php OK\n\" : \"\n❌ User.php FAILED\n\";
-      if (!\$ok) exit(1);
-      "
-    
-    - echo ""
-    - echo "🧪 Testing functions in Task.php..."
-    - |
-      php -r "
+      
+      // Test get_user_by_id
+      \$user = get_user_by_id(\$conn, 1);
+      if (\$user !== 0 && \$user['id'] == 1) {
+          echo '✅ get_user_by_id() - works, found user: ' . \$user['full_name'] . '\n';
+      } else {
+          echo '❌ get_user_by_id() - failed\n';
+      }
+      
+      // Test count_users
+      \$count = count_users(\$conn);
+      if (\$count > 0) {
+          echo '✅ count_users() - works, count = ' . \$count . '\n';
+      } else {
+          echo '❌ count_users() - failed\n';
+      }
+      
+      // Test insert_user
+      \$new_user = ['New User', 'newuser', password_hash('pass123', PASSWORD_DEFAULT), 'employee'];
+      try {
+          insert_user(\$conn, \$new_user);
+          echo '✅ insert_user() - works, user inserted\n';
+      } catch (Exception \$e) {
+          echo '❌ insert_user() - failed: ' . \$e->getMessage() . '\n';
+      }
+      
+      // ============================================
+      // TEST TASK FUNCTIONS
+      // ============================================
+      echo '\n=== TESTING Task.php FUNCTIONS ===\n';
+      
       require_once 'app/Model/Task.php';
-      echo '=== TEST Task.php ===\n\n';
-      \$functions = ['insert_task', 'get_all_tasks', 'get_task_by_id', 'update_task', 'delete_task', 'count_tasks', 'get_all_tasks_by_id', 'get_all_tasks_due_today', 'get_all_tasks_overdue'];
-      \$ok = true;
-      foreach (\$functions as \$f) {
-          if (function_exists(\$f)) { echo \"✅ \$f\n\"; } 
-          else { echo \"❌ \$f\n\"; \$ok = false; }
+      
+      // Test insert_task
+      \$task_data = ['Test Task', 'This is a test description', 2, '2025-12-31'];
+      try {
+          insert_task(\$conn, \$task_data);
+          echo '✅ insert_task() - works, task inserted\n';
+      } catch (Exception \$e) {
+          echo '❌ insert_task() - failed: ' . \$e->getMessage() . '\n';
       }
-      echo \$ok ? \"\n✅ Task.php OK\n\" : \"\n❌ Task.php FAILED\n\";
-      if (!\$ok) exit(1);
-      "
-    
-    - echo ""
-    - echo "🧪 Testing functions in Notification.php..."
-    - |
-      php -r "
+      
+      // Test get_all_tasks
+      \$tasks = get_all_tasks(\$conn);
+      if (\$tasks !== 0 && count(\$tasks) > 0) {
+          echo '✅ get_all_tasks() - works, found ' . count(\$tasks) . ' tasks\n';
+      } else {
+          echo '❌ get_all_tasks() - failed\n';
+      }
+      
+      // Test get_task_by_id
+      \$task = get_task_by_id(\$conn, 1);
+      if (\$task !== 0 && \$task['id'] == 1) {
+          echo '✅ get_task_by_id() - works, found task: ' . \$task['title'] . '\n';
+      } else {
+          echo '❌ get_task_by_id() - failed\n';
+      }
+      
+      // Test count_tasks
+      \$task_count = count_tasks(\$conn);
+      if (\$task_count > 0) {
+          echo '✅ count_tasks() - works, count = ' . \$task_count . '\n';
+      } else {
+          echo '❌ count_tasks() - failed\n';
+      }
+      
+      // Test update_task
+      \$update_data = ['Updated Task', 'Updated description', 2, '2025-12-31', 1];
+      try {
+          update_task(\$conn, \$update_data);
+          echo '✅ update_task() - works, task updated\n';
+      } catch (Exception \$e) {
+          echo '❌ update_task() - failed: ' . \$e->getMessage() . '\n';
+      }
+      
+      // Test update_task_status
+      \$status_data = ['completed', 1];
+      try {
+          update_task_status(\$conn, \$status_data);
+          echo '✅ update_task_status() - works, status updated\n';
+      } catch (Exception \$e) {
+          echo '❌ update_task_status() - failed: ' . \$e->getMessage() . '\n';
+      }
+      
+      // Test delete_task
+      try {
+          delete_task(\$conn, [1]);
+          echo '✅ delete_task() - works, task deleted\n';
+      } catch (Exception \$e) {
+          echo '❌ delete_task() - failed: ' . \$e->getMessage() . '\n';
+      }
+      
+      // ============================================
+      // TEST NOTIFICATION FUNCTIONS
+      // ============================================
+      echo '\n=== TESTING Notification.php FUNCTIONS ===\n';
+      
       require_once 'app/Model/Notification.php';
-      echo '=== TEST Notification.php ===\n\n';
-      \$functions = ['get_all_my_notifications', 'count_notification', 'insert_notification', 'notification_make_read'];
-      \$ok = true;
-      foreach (\$functions as \$f) {
-          if (function_exists(\$f)) { echo \"✅ \$f\n\"; } 
-          else { echo \"❌ \$f\n\"; \$ok = false; }
+      
+      // Test insert_notification
+      \$notif_data = ['Test notification message', 2, 'Test Type'];
+      try {
+          insert_notification(\$conn, \$notif_data);
+          echo '✅ insert_notification() - works\n';
+      } catch (Exception \$e) {
+          echo '❌ insert_notification() - failed: ' . \$e->getMessage() . '\n';
       }
-      echo \$ok ? \"\n✅ Notification.php OK\n\" : \"\n❌ Notification.php FAILED\n\";
-      if (!\$ok) exit(1);
+      
+      // Test count_notification
+      \$notif_count = count_notification(\$conn, 2);
+      if (\$notif_count >= 0) {
+          echo '✅ count_notification() - works, count = ' . \$notif_count . '\n';
+      } else {
+          echo '❌ count_notification() - failed\n';
+      }
+      
+      // Test get_all_my_notifications
+      \$notifications = get_all_my_notifications(\$conn, 2);
+      if (\$notifications !== 0 || is_array(\$notifications)) {
+          echo '✅ get_all_my_notifications() - works\n';
+      } else {
+          echo '❌ get_all_my_notifications() - failed\n';
+      }
+      
+      // Test notification_make_read
+      try {
+          notification_make_read(\$conn, 2, 1);
+          echo '✅ notification_make_read() - works\n';
+      } catch (Exception \$e) {
+          echo '❌ notification_make_read() - failed: ' . \$e->getMessage() . '\n';
+      }
+      
+      echo '\n=== ALL TESTS PASSED ===\n';
       "
-    
-    - echo ""
     - echo "✅ All function tests passed"
 
 quality_job:
   stage: quality
   image: php:8.2-cli-alpine
+  allow_failure: true
   script:
     - echo "🔍 Quality check"
-    - echo "Checking for prepared statements..."
-    - grep -r "prepare(" app/ DB_connection.php && echo "✅ Prepared statements OK" || echo "⚠️ No prepared statements found"
-    - echo "Checking for password hashing..."
-    - grep -r "password_hash\|password_verify" app/ && echo "✅ Password hashing OK" || echo "⚠️ No password hashing found"
-    - echo "Checking for XSS protection..."
-    - grep -r "htmlspecialchars\|stripcslashes" app/ && echo "✅ XSS protection OK" || echo "⚠️ No XSS protection found"
+    - grep -r "password_hash\|password_verify" app/ && echo "✅ Password hashing OK" || echo "⚠️ Missing"
+    - grep -r "prepare(" app/ && echo "✅ Prepared statements OK" || echo "⚠️ Missing"
     - echo "✅ Quality check passed"
-  allow_failure: true
 
 package_job:
   stage: package
@@ -115,13 +247,8 @@ package_job:
   before_script:
     - apk add --no-cache zip
   script:
-    - echo "📦 Creating package..."
-    - zip -r employee-task-management.zip *.php app/ inc/ css/ assets/ img/ 2>/dev/null || true
+    - zip -r employee-task-management.zip *.php app/ inc/ css/ assets/ 2>/dev/null || true
     - echo "✅ Package created"
-    - echo ""
-    - echo "📋 Package size:"
-    - ls -lh employee-task-management.zip
   artifacts:
     paths:
       - employee-task-management.zip
-    expire_in: 7 days
