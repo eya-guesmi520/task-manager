@@ -4,14 +4,10 @@ stages:
   - quality
   - package
 
-variables:
-  COMPOSER_CACHE_DIR: "$CI_PROJECT_DIR/.composer-cache"
-
 cache:
   paths:
     - .composer-cache/
 
-# Job de build - vérification syntaxique de tous les fichiers PHP
 build_job:
   stage: build
   image: php:8.2-cli-alpine
@@ -20,26 +16,22 @@ build_job:
     - find . -name "*.php" -type f | xargs -n 1 php -l
     - echo "✅ Build réussi - Syntaxe PHP valide"
 
-# Test unitaire des fonctions existantes
 unit_test_job:
   stage: test
   image: php:8.2-cli-alpine
-  before_script:
-    - apk add --no-cache mysql-client
   script:
     - echo "🧪 Test des fonctions du modèle User.php..."
     - |
       php -r "
       echo '=== TEST DES FONCTIONS ===\n\n';
-      
-      // Vérification que toutes les fonctions sont définies
+
       \$functions_user = ['get_all_users', 'insert_user', 'update_user', 'delete_user', 'get_user_by_id', 'update_profile', 'count_users'];
       \$functions_task = ['insert_task', 'get_all_tasks', 'get_all_tasks_due_today', 'count_tasks_due_today', 'get_all_tasks_overdue', 'count_tasks_overdue', 'get_all_tasks_NoDeadline', 'count_tasks_NoDeadline', 'delete_task', 'get_task_by_id', 'count_tasks', 'update_task', 'update_task_status', 'get_all_tasks_by_id', 'count_pending_tasks', 'count_in_progress_tasks', 'count_completed_tasks', 'count_my_tasks', 'count_my_tasks_overdue', 'count_my_tasks_NoDeadline', 'count_my_pending_tasks', 'count_my_in_progress_tasks', 'count_my_completed_tasks'];
       \$functions_notif = ['get_all_my_notifications', 'count_notification', 'insert_notification', 'notification_make_read'];
-      
+
       \$all_functions = array_merge(\$functions_user, \$functions_task, \$functions_notif);
       \$missing = [];
-      
+
       foreach (\$all_functions as \$func) {
           if (!function_exists(\$func)) {
               \$missing[] = \$func;
@@ -47,7 +39,7 @@ unit_test_job:
               echo \"✅ Fonction \$func existe\n\";
           }
       }
-      
+
       if (empty(\$missing)) {
           echo \"\n✅ Toutes les fonctions (\" . count(\$all_functions) . \") sont définies correctement\n\";
       } else {
@@ -55,10 +47,8 @@ unit_test_job:
           exit(1);
       }
       "
+    - echo "✅ Tests unitaires réussis"
 
-  - echo "✅ Tests unitaires réussis"
-
-# Test fonctionnel - simulation d'appels de fonctions
 functional_test_job:
   stage: test
   image: php:8.2-cli-alpine
@@ -67,8 +57,7 @@ functional_test_job:
     - |
       php -r "
       echo 'Vérification des signatures des fonctions...\n\n';
-      
-      // Réflexion sur les fonctions pour vérifier leur signature
+
       \$functions_to_check = [
           'get_all_users' => 1,
           'insert_user' => 1,
@@ -83,7 +72,7 @@ functional_test_job:
           'count_notification' => 1,
           'insert_notification' => 1
       ];
-      
+
       foreach (\$functions_to_check as \$func => \$expected_params) {
           if (function_exists(\$func)) {
               \$reflection = new ReflectionFunction(\$func);
@@ -96,118 +85,48 @@ functional_test_job:
       "
     - echo "✅ Tests fonctionnels réussis"
 
-# Test de sécurité - analyse du code
 security_test_job:
   stage: quality
   image: php:8.2-cli-alpine
   script:
     - echo "🔒 Analyse de sécurité du code..."
-    - |
-      # Vérification des requêtes préparées (sécurité)
-      echo "Vérification de l'utilisation des requêtes préparées..."
-      if grep -r "prepare(" app/ DB_connection.php; then
-        echo "✅ Utilisation de requêtes préparées détectée"
-      else
-        echo "⚠️ Aucune requête préparée trouvée"
-      fi
-      
-      # Vérification du password_hash
-      echo "\nVérification du hachage des mots de passe..."
-      if grep -r "password_hash(" app/; then
-        echo "✅ Utilisation de password_hash() détectée"
-      fi
-      
-      if grep -r "password_verify(" app/; then
-        echo "✅ Utilisation de password_verify() détectée"
-      fi
-      
-      # Vérification de session_start()
-      echo "\nVérification de la gestion des sessions..."
-      SESSION_COUNT=$(grep -r "session_start()" *.php inc/ | wc -l)
-      echo "✅ session_start() trouvé $SESSION_COUNT fois"
-      
-      # Vérification htmlspecialchars pour XSS
-      echo "\nVérification protection XSS..."
-      if grep -r "htmlspecialchars" app/; then
-        echo "✅ htmlspecialchars() utilisé pour échapper les sorties"
-      fi
-      
-      # Vérification stripslashes
-      if grep -r "stripslashes" app/; then
-        echo "✅ stripslashes() utilisé"
-      fi
-      
+    - echo "Vérification de l'utilisation des requêtes préparées..."
+    - if grep -r "prepare(" app/ DB_connection.php; then echo "✅ Utilisation de requêtes préparées détectée"; else echo "⚠️ Aucune requête préparée trouvée"; fi
+    - echo "Vérification du hachage des mots de passe..."
+    - if grep -r "password_hash(" app/; then echo "✅ Utilisation de password_hash() détectée"; fi
+    - if grep -r "password_verify(" app/; then echo "✅ Utilisation de password_verify() détectée"; fi
+    - echo "Vérification protection XSS..."
+    - if grep -r "htmlspecialchars" app/; then echo "✅ htmlspecialchars() utilisé pour échapper les sorties"; fi
     - echo "✅ Analyse de sécurité terminée"
   allow_failure: true
 
-# Test de qualité - vérification des bonnes pratiques
 code_quality_job:
   stage: quality
   image: php:8.2-cli-alpine
   script:
     - echo "📊 Analyse de la qualité du code..."
-    - |
-      # Vérification des TODO/FIXME dans le code
-      echo "Recherche de TODO et FIXME..."
-      grep -rn "TODO\|FIXME" *.php app/ inc/ || echo "✅ Aucun TODO/FIXME trouvé"
-      
-      # Vérification des fonctions trop longues
-      echo "\nVérification de la taille des fonctions..."
-      for file in app/Model/*.php; do
-        echo "📄 Analyse de \$file..."
-        LONG_FUNCS=$(grep -n "function" \$file | head -5)
-        echo "\$LONG_FUNCS"
-      done
-      
-      # Comptage des lignes de code
-      echo "\n📊 Statistiques du code:"
-      PHP_FILES=$(find . -name "*.php" -not -path "./vendor/*" | wc -l)
-      PHP_LINES=$(find . -name "*.php" -not -path "./vendor/*" -exec cat {} \; | wc -l)
-      echo "   - Fichiers PHP: $PHP_FILES"
-      echo "   - Lignes de code: $PHP_LINES"
-      
+    - echo "Recherche de TODO et FIXME..."
+    - grep -rn "TODO\|FIXME" *.php app/ inc/ || echo "✅ Aucun TODO/FIXME trouvé"
+    - echo "📊 Statistiques du code:"
+    - PHP_FILES=$(find . -name "*.php" -not -path "./vendor/*" | wc -l)
+    - PHP_LINES=$(find . -name "*.php" -not -path "./vendor/*" -exec cat {} \; | wc -l)
+    - echo "   - Fichiers PHP: $PHP_FILES"
+    - echo "   - Lignes de code: $PHP_LINES"
     - echo "✅ Analyse de qualité terminée"
   allow_failure: true
 
-# Test de connexion à la base de données (structure)
 database_test_job:
   stage: quality
   image: php:8.2-cli-alpine
   script:
     - echo "🗄️ Vérification de la structure de la base de données..."
-    - |
-      # Vérifier que le fichier SQL existe et contient les bonnes tables
-      if [ -f "task_management_db.sql" ]; then
-        echo "✅ Fichier SQL trouvé"
-        
-        # Vérifier les tables nécessaires
-        if grep -q "CREATE TABLE.*users" task_management_db.sql; then
-          echo "✅ Table 'users' définie"
-        fi
-        
-        if grep -q "CREATE TABLE.*tasks" task_management_db.sql; then
-          echo "✅ Table 'tasks' définie"
-        fi
-        
-        if grep -q "CREATE TABLE.*notifications" task_management_db.sql; then
-          echo "✅ Table 'notifications' définie"
-        fi
-        
-        # Vérifier les colonnes importantes
-        if grep -q "status.*ENUM" task_management_db.sql; then
-          echo "✅ Colonne 'status' avec ENUM définie"
-        fi
-        
-        if grep -q "role.*ENUM" task_management_db.sql; then
-          echo "✅ Colonne 'role' avec ENUM définie"
-        fi
-      else
-        echo "⚠️ Fichier SQL non trouvé"
-      fi
+    - if [ -f "task_management_db.sql" ]; then echo "✅ Fichier SQL trouvé"; fi
+    - if grep -q "CREATE TABLE.*users" task_management_db.sql; then echo "✅ Table 'users' définie"; fi
+    - if grep -q "CREATE TABLE.*tasks" task_management_db.sql; then echo "✅ Table 'tasks' définie"; fi
+    - if grep -q "CREATE TABLE.*notifications" task_management_db.sql; then echo "✅ Table 'notifications' définie"; fi
     - echo "✅ Test base de données réussi"
   allow_failure: true
 
-# Job de packaging amélioré
 package_job:
   stage: package
   image: alpine:latest
@@ -215,46 +134,9 @@ package_job:
     - apk add --no-cache zip
   script:
     - echo "📦 Création du package de l'application..."
-    - |
-      zip -r employee-task-management.zip \
-        *.php \
-        app/ \
-        inc/ \
-        css/ \
-        assets/ \
-        img/ \
-        --exclude "*.sql" \
-        --exclude "*.md" \
-        --exclude ".git*"
+    - zip -r employee-task-management.zip *.php app/ inc/ css/ assets/ img/ --exclude "*.sql" --exclude "*.md" --exclude ".git*"
     - echo "✅ Package créé: employee-task-management.zip"
-    - echo ""
-    - echo "📋 Contenu du package:"
-    - unzip -l employee-task-management.zip | head -20
   artifacts:
     paths:
       - employee-task-management.zip
     expire_in: 7 days
-
-# Rapport final du pipeline
-report_job:
-  stage: package
-  image: alpine:latest
-  script:
-    - echo ""
-    - echo "============================================="
-    - echo "📋 RAPPORT FINAL DU PIPELINE"
-    - echo "============================================="
-    - echo "✅ BUILD: Syntaxe PHP vérifiée"
-    - echo "✅ TESTS: ${CI_JOB_NAME} - Fonctions validées"
-    - echo "✅ QUALITÉ: Sécurité et bonnes pratiques"
-    - echo "✅ PACKAGE: Application empaquetée"
-    - echo "============================================="
-    - echo "📊 Résumé des fichiers:"
-    - ls -la *.php 2>/dev/null | wc -l && echo " fichiers PHP à la racine"
-    - echo "📁 app/Model/ contient: $(ls app/Model/ 2>/dev/null | wc -l) fichiers"
-    - echo "============================================="
-  dependencies:
-    - build_job
-    - unit_test_job
-    - functional_test_job
-    - package_job
